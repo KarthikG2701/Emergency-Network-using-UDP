@@ -1,40 +1,45 @@
-import socket
+from socket import *
 
-HOST = '127.0.0.1'
-PORT = 5000
+serverIP = '10.0.0.1'
+serverPort = 12000
 
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server_socket.bind((HOST,PORT))
+serverSocket = socket(AF_INET, SOCK_DGRAM)
+serverSocket.bind((serverIP, serverPort))
 
-registered_client = set()
+subscribers = set()
 
-print(f"[*] Emergency UDP server started on { HOST}:{PORT}")
-print("[*] waiting  for  incoming  emergency alerts...\n")
+print(f"Emergency Notification Server started on {serverIP}:{serverPort}")
+print("Waiting for 2 subscribers to register...")
 
-try:
-  while True:
-    data, client_address = server_socket.recvfrom(1024)
-    message = data.decode('utf-8').strip()
+while True:
+    try:
+        message, clientAddress = serverSocket.recvfrom(2048)
+        decoded_msg = message.decode()
+        
+        # Accept the custom message and register the new client
+        if clientAddress not in subscribers:
+            subscribers.add(clientAddress)
+            print(f"\n[+] New subscriber registered: {clientAddress}")
+            print(f"[+] Client Message: {decoded_msg}")
+            
+            # Send confirmation back to unblock the client's timeout loop
+            confirmation = "Registration Confirmed."
+            serverSocket.sendto(confirmation.encode(), clientAddress)
+            
+            # Auto-Broadcast once both h2 and h3 connect
+            if len(subscribers) == 2:
+                print("\n[!] 2 Subscribers detected. Broadcasting emergency alert...")
+                alert_payload = "CRITICAL: Facility breach detected. Evacuate immediately!"
+                for sub in subscribers:
+                    serverSocket.sendto(alert_payload.encode(), sub)
+                
+                # Clear the set so it doesn't endlessly broadcast if clients send more data
+                subscribers.clear()
+            
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+        break
+    except Exception as e:
+        print(f"\nSocket error: {e}")
 
-    if message == "REGISTER":
-         registered_client.add(client_address)
-         print(f"[REGISTER] new client added : {client_address}")
-         response = "ACK: Registration successful!"
-         server_socket.sendto(response.encode('utf-8'), client_address)
-
-
-    elif message.startswith("ALERT"):
-         print(f"[ALERT RECEIVED] from {client_address}: {message}")
-         response = "ACK: Emergency alert  received!"
-         server_socket.sendto(response.encode('utf-8'), client_address)
-
-    else:
-         response = "ERR: Unkown command"
-         srver_socket.sendto(response.encode('utf-8'),  client_address)
-
-except KeyboardInterrupt:
-   print("\n[-] shutting down server...")
-finally:
-   server_socket.close()
-
+serverSocket.close()
