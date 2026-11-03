@@ -1,40 +1,30 @@
 import socket
 
-HOST = '127.0.0.1'
-PORT = 5000
-
+HOST, PORT = '127.0.0.1', 5000
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server_socket.bind((HOST,PORT))
+server_socket.bind((HOST, PORT))
 
-registered_client = set()
-
-print(f"[*] Emergency UDP server started on { HOST}:{PORT}")
-print("[*] waiting  for  incoming  emergency alerts...\n")
+registered_clients = set()
+print(f"[*] Emergency UDP server listening on {HOST}:{PORT}")
 
 try:
-  while True:
-    data, client_address = server_socket.recvfrom(1024)
-    message = data.decode('utf-8').strip()
+    while True:
+        data, addr = server_socket.recvfrom(1024)
+        msg = data.decode('utf-8').strip()
 
-    if message == "REGISTER":
-         registered_client.add(client_address)
-         print(f"[REGISTER] new client added : {client_address}")
-         response = "ACK: Registration successful!"
-         server_socket.sendto(response.encode('utf-8'), client_address)
-
-
-    elif message.startswith("ALERT"):
-         print(f"[ALERT RECEIVED] from {client_address}: {message}")
-         response = "ACK: Emergency alert  received!"
-         server_socket.sendto(response.encode('utf-8'), client_address)
-
-    else:
-         response = "ERR: Unkown command"
-         srver_socket.sendto(response.encode('utf-8'),  client_address)
-
+        if msg == "REGISTER":
+            registered_clients.add(addr)
+            print(f"[+] Client registered from {addr}. Total clients: {len(registered_clients)}")
+            server_socket.sendto(b"ACK: Registration successful!", addr)
+        elif msg.startswith("ALERT:"):
+            print(f"[!] Received alert from {addr}: {msg}")
+            server_socket.sendto(b"ACK: Emergency alert received!", addr)
+            # Forward the alert to all other registered clients
+            for client in registered_clients:
+                if client != addr:
+                    server_socket.sendto(msg.encode('utf-8'), client)
 except KeyboardInterrupt:
-   print("\n[-] shutting down server...")
+    print("\n[-] Shutting down server...")
 finally:
-   server_socket.close()
-
+    server_socket.close()
