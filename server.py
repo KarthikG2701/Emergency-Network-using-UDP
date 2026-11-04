@@ -1,40 +1,90 @@
 import socket
+import threading
+import queue
+import time
 
-HOST = '127.0.0.1'
-PORT = 5000
+SERVER_IP = '10.0.0.1'
+SERVER_PORT = 5000
+
+# Separate FIFO queues for each priority class
+high_q = queue.Queue()
+mod_q = queue.Queue()
+low_q = queue.Queue()
+
+subscribers = set()
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server_socket.bind((HOST,PORT))
+server_socket.bind((SERVER_IP, SERVER_PORT))
+print(f"[*] Strict Priority UDP Server listening on {SERVER_IP}:{SERVER_PORT}")
 
-registered_client = set()
+def priority_scheduler():
+    """Services High -> Moderate -> Low in strict priority order."""
+    while True:
+        item = None
+        priority_level = None
 
-print(f"[*] Emergency UDP server started on { HOST}:{PORT}")
-print("[*] waiting  for  incoming  emergency alerts...\n")
+        # Always check High priority first, then Moderate, then Low
+        if not high_q.empty():
+            item = high_q.get()
+            priority_level = "HIGH"
+        elif not mod_q.empty():
+            item = mod_q.get()
+            priority_level = "MODERATE"
+        elif not low_q.empty():
+            item = low_q.get()
+            priority_level = "LOW"
+        else:
+            time.sleep(0.005)
+            continue
 
-try:
-  while True:
-    data, client_address = server_socket.recvfrom(1024)
-    message = data.decode('utf-8').strip()
+        addr, msg, arrival_time = item
 
-    if message == "REGISTER":
-         registered_client.add(client_address)
-         print(f"[REGISTER] new client added : {client_address}")
-         response = "ACK: Registration successful!"
-         server_socket.sendto(response.encode('utf-8'), client_address)
+        # Simulated transmission/service time (60ms) so queuing delay is clearly measurable
+        time.sleep(0.06)
 
+        # ONLY High Priority triggers an emergency broadcast to subscribers (h2, h3)
+        if priority_level == "HIGH":
+            alert_banner = f"🚨 [EMERGENCY DECLARED]: {msg}"
+            print(f"\n[!!!] HIGH PRIORITY EMERGENCY TRIGGERED BY {addr}: {msg}")
+            for sub in list(subscribers):
+                try:
+                    server_socket.sendto(alert_banner.encode(), sub)
+                except Exception as e:
+                    print(f"Failed to alert subscriber {sub}: {e}")
+            ack_reply = f"EMERGENCY_BROADCAST_SENT|{priority_level}|{msg}"
+        else:
+            print(f"[*] Serviced [{priority_level}] request from {addr}: {msg}")
+            ack_reply = f"NORMAL_ACK|{priority_level}|{msg}"
 
-    elif message.startswith("ALERT"):
-         print(f"[ALERT RECEIVED] from {client_address}: {message}")
-         response = "ACK: Emergency alert  received!"
-         server_socket.sendto(response.encode('utf-8'), client_address)
+        # Send reply back to sender so it can calculate total RTT latency
+        server_socket.sendto(ack_reply.encode(), addr)
 
-    else:
-         response = "ERR: Unkown command"
-         srver_socket.sendto(response.encode('utf-8'),  client_address)
+# Start background scheduler thread
+threading.Thread(target=priority_scheduler, daemon=True).start()
 
-except KeyboardInterrupt:
-   print("\n[-] shutting down server...")
-finally:
-   server_socket.close()
+while True:
+    try:
+        data, addr = server_socket.recvfrom(2048)
+        text = data.decode().strip()
 
+        # Handle subscriber registrations from h2 and h3 client.py scripts
+        if text.startswith("REGISTER") or ":" not in text:
+            subscribers.add(addr)
+            print(f"[+] Registered Subscriber Node: {addr} (Total: {len(subscribers)})")
+            server_socket.sendto(b"Registered successfully with Emergency Server.", addr)
+            continue
+
+        # Parse PRIORITY:MESSAGE from UI traffic
+        pri, msg = text.split(":", 1)
+        pri = pri.strip().upper()
+
+        # Small batching window (15ms) so simultaneous burst packets enter queues before scheduler pulls
+        if pri == "HIGH":
+            high_q.put((addr, msg, time.time()))
+        elif pri == "MODERATE":
+            mod_q.put((addr, msg, time.time()))
+        else:
+            low_q.put((addr, msg, time.time()))
+
+    except Exception as e:
+        print(f"Server error: {e}")
