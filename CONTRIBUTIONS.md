@@ -1,9 +1,10 @@
+CONTRIBUTIONS:
+
 🔹 Deliverable 1: Core SDN & Socket Foundation
 Akshata — UDP Socket Programming & Baseline Latency
 
 Designed and implemented the core connectionless UDP client-server communication architecture (server.py and client.py).   
-Computer Networking A Top-Down Approach, 8th Edition by James F. Kurose, Keith W. Ross-Pearson-9780136681557.pdf
-+ 1
+
 
 Built the subscriber registration mechanism allowing virtual hosts (h2, h3) to register with the central emergency server on h1 (10.0.0.1:5000).
 
@@ -46,8 +47,7 @@ trans
 proc
 ​
  ) per packet for downstream telemetry.   
-Computer Networking A Top-Down Approach, 8th Edition by James F. Kurose, Keith W. Ross-Pearson-9780136681557.pdf
-+ 1
+
 
 B Raghavendra — OpenFlow 1.3 Enforcement, Namespace Bridging & Process Automation (network_topo.py, start.sh)
 
